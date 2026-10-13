@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>가상화폐 · 주식 실시간 모의 투자 시뮬레이터</title>
+    <!-- TradingView Lightweight Charts -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div id="app" class="app-container">
+        <!-- 상단 헤더 -->
+        <header class="app-header">
+            <div class="logo-area">
+                <i class="fa-solid fa-chart-line logo-icon"></i>
+                <div class="logo-text">
+                    <h1>MOCK INVEST</h1>
+                    <span class="sub">실시간 시세 기반 모의 투자 시뮬레이터</span>
+                </div>
+            </div>
+
+            <!-- 계좌 요약 대시보드 -->
+            <div class="header-portfolio-summary">
+                <div class="summary-card">
+                    <span class="label">총 보유자산</span>
+                    <span class="value" id="hdr-total-assets">100,000,000 원</span>
+                </div>
+                <div class="summary-card">
+                    <span class="label">실시간 평가손익</span>
+                    <span class="value neutral" id="hdr-total-pnl">0 원 (0.00%)</span>
+                </div>
+                <div class="summary-card">
+                    <span class="label">주문가능 예수금</span>
+                    <span class="value" id="hdr-cash">100,000,000 원</span>
+                </div>
+                <div class="summary-card">
+                    <span class="label">미체결 묶인금액</span>
+                    <span class="value" id="hdr-locked-cash">0 원</span>
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <div class="connection-status" id="ws-status">
+                    <span class="pulse-dot"></span>
+                    <span class="status-text">연결 중...</span>
+                </div>
+                <button class="btn btn-outline" id="btn-reset-account" title="계좌를 1억 원으로 리셋">
+                    <i class="fa-solid fa-arrows-rotate"></i> 계좌 초기화
+                </button>
+            </div>
+        </header>
+
+        <!-- 메인 콘텐츠 영역 (3분할 레이아웃) -->
+        <main class="main-layout">
+            <!-- 좌측: 실시간 종목 목록 -->
+            <aside class="market-sidebar">
+                <div class="market-tabs">
+                    <button class="tab-btn active" data-tab="all">전체</button>
+                    <button class="tab-btn" data-tab="crypto">가상화폐</button>
+                    <button class="tab-btn" data-tab="stock">주식</button>
+                </div>
+                <div class="market-search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="market-search-input" placeholder="종목명 또는 심볼 검색">
+                </div>
+                <div class="market-list-header">
+                    <span>종목</span>
+                    <span class="text-right">현재가 / 등락률</span>
+                </div>
+                <div class="market-list" id="market-list">
+                    <!-- 종목 아이템 동적 렌더링 -->
+                </div>
+            </aside>
+
+            <!-- 중앙: 차트 및 호가창 -->
+            <section class="center-stage">
+                <!-- 선택 종목 헤더 -->
+                <div class="symbol-header" id="current-symbol-header">
+                    <div class="symbol-title">
+                        <h2 id="sym-name">비트코인</h2>
+                        <span class="symbol-code" id="sym-code">KRW-BTC</span>
+                        <span class="badge" id="sym-badge">가상화폐</span>
+                    </div>
+                    <div class="symbol-price-box">
+                        <span class="sym-price" id="sym-price">--- 원</span>
+                        <span class="sym-change" id="sym-change">---%</span>
+                    </div>
+                    <div class="symbol-stats">
+                        <div class="stat-item">
+                            <span class="k">고가</span>
+                            <span class="v up" id="sym-high">---</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="k">저가</span>
+                            <span class="v down" id="sym-low">---</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="k">거래량</span>
+                            <span class="v" id="sym-volume">---</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 차트 컨테이너 -->
+                <div class="chart-wrapper">
+                    <div id="tv-chart" class="chart-canvas"></div>
+                </div>
+
+                <!-- 호가창 -->
+                <div class="orderbook-container">
+                    <div class="orderbook-header">
+                        <span>매도호가 (Ask)</span>
+                        <span class="text-center">호가 (KRW)</span>
+                        <span class="text-right">매수호가 (Bid)</span>
+                    </div>
+                    <div class="orderbook-body" id="orderbook-rows">
+                        <!-- 호가 데이터 실시간 렌더링 -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- 우측: 주문 패드 -->
+            <aside class="order-pad">
+                <div class="side-selector">
+                    <button class="side-btn buy active" id="btn-side-buy">매수 (BUY)</button>
+                    <button class="side-btn sell" id="btn-side-sell">매도 (SELL)</button>
+                </div>
+
+                <div class="order-type-selector">
+                    <button class="type-btn active" id="btn-type-limit">지정가</button>
+                    <button class="type-btn" id="btn-type-market">시장가</button>
+                </div>
+
+                <div class="order-form">
+                    <div class="form-group" id="group-order-price">
+                        <label for="order-price">주문가격 (원)</label>
+                        <div class="input-with-action">
+                            <input type="number" id="order-price" placeholder="가격 입력" step="any">
+                            <button type="button" class="btn-micro" id="btn-set-market-price">현재가</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="order-qty">주문수량</label>
+                        <input type="number" id="order-qty" placeholder="수량 입력" step="any" min="0">
+                    </div>
+
+                    <!-- 퍼센트 빠른 선택 버튼 -->
+                    <div class="pct-button-group">
+                        <button class="btn-pct" data-pct="0.10">10%</button>
+                        <button class="btn-pct" data-pct="0.25">25%</button>
+                        <button class="btn-pct" data-pct="0.50">50%</button>
+                        <button class="btn-pct" data-pct="1.00">최대(100%)</button>
+                    </div>
+
+                    <!-- 주문 요약 정보 -->
+                    <div class="order-calculation">
+                        <div class="calc-row">
+                            <span>주문 총액:</span>
+                            <span id="calc-order-total">0 원</span>
+                        </div>
+                        <div class="calc-row">
+                            <span>예상 수수료:</span>
+                            <span id="calc-fee">0 원</span>
+                        </div>
+                        <div class="calc-row highlight">
+                            <span id="calc-label-final">총 필요 금액:</span>
+                            <span id="calc-final-amount">0 원</span>
+                        </div>
+                    </div>
+
+                    <div class="user-avail-info">
+                        <span id="label-avail">매수가능 예수금:</span>
+                        <strong id="avail-amount">0 원</strong>
+                    </div>
+
+                    <button class="submit-order-btn buy" id="btn-submit-order">
+                        매수 주문 (지정가)
+                    </button>
+                </div>
+            </aside>
+        </main>
+
+        <!-- 하단: 자산 포트폴리오 및 주문 관리 탭 -->
+        <footer class="bottom-panel">
+            <div class="bottom-tabs">
+                <button class="b-tab-btn active" data-tab="holdings">
+                    보유 자산 및 실시간 손익 (<span id="holdings-count">0</span>)
+                </button>
+                <button class="b-tab-btn" data-tab="pending">
+                    미체결 주문 (<span id="pending-count">0</span>)
+                </button>
+                <button class="b-tab-btn" data-tab="trades">
+                    체결 내역 (<span id="trades-count">0</span>)
+                </button>
+            </div>
+
+            <div class="bottom-tab-content">
+                <!-- 보유자산 탭 -->
+                <div class="tab-pane active" id="pane-holdings">
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>종목명</th>
+                                    <th class="text-right">보유수량</th>
+                                    <th class="text-right">매수평균가</th>
+                                    <th class="text-right">현재가</th>
+                                    <th class="text-right">평가금액</th>
+                                    <th class="text-right">평가손익</th>
+                                    <th class="text-right">수익률</th>
+                                    <th class="text-center">즉시청산</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-holdings">
+                                <tr><td colspan="8" class="text-center empty-msg">보유 중인 자산이 없습니다.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 미체결 주문 탭 -->
+                <div class="tab-pane" id="pane-pending">
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>주문일시</th>
+                                    <th>종목</th>
+                                    <th>구분</th>
+                                    <th>유형</th>
+                                    <th class="text-right">주문가격</th>
+                                    <th class="text-right">주문수량</th>
+                                    <th class="text-right">미체결수량</th>
+                                    <th class="text-center">관리</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-pending">
+                                <tr><td colspan="8" class="text-center empty-msg">대기 중인 미체결 주문이 없습니다.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 체결 내역 탭 -->
+                <div class="tab-pane" id="pane-trades">
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>체결일시</th>
+                                    <th>종목</th>
+                                    <th>구분</th>
+                                    <th class="text-right">체결가격</th>
+                                    <th class="text-right">체결수량</th>
+                                    <th class="text-right">체결금액</th>
+                                    <th class="text-right">수수료</th>
+                                    <th class="text-right">실현손익</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-trades">
+                                <tr><td colspan="8" class="text-center empty-msg">체결 내역이 없습니다.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </footer>
+
+        <!-- 토스트 알림 컨테이너 -->
+        <div id="toast-container" class="toast-container"></div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
